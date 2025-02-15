@@ -33,21 +33,35 @@ zap = ZAPv2(
     }
 )
 
+def get_chrome_options(headless=True):
+    chrome_options = Options()
+    if headless:
+        chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--no-sandbox")
+    # Attempt to get the Chrome binary from the environment variable.
+    # If not set (e.g. during local testing), fallback to a common default.
+    chrome_bin = os.environ.get("GOOGLE_CHROME_BIN")
+    if not chrome_bin:
+        # Fallback: update this path if your local Chrome binary is located elsewhere.
+        chrome_bin = "/usr/bin/google-chrome"
+        print("GOOGLE_CHROME_BIN not set; falling back to:", chrome_bin)
+    chrome_options.binary_location = chrome_bin
+    return chrome_options
+
+def get_webdriver(headless=True):
+    chrome_options = get_chrome_options(headless)
+    chrome_driver_path = os.environ.get("CHROMEDRIVER_PATH", "chromedriver")
+    service = ChromeService(executable_path=chrome_driver_path)
+    driver = webdriver.Chrome(service=service, options=chrome_options)
+    return driver
+
 def simulate_interaction(target, username, password):
     """
     Automatically logs in with provided credentials and simulates actions.
     (Simulated login mode)
     """
-    chrome_options = Options()
-    chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--no-sandbox")
-    # Set the Chrome binary location from the buildpack
-    chrome_options.binary_location = os.environ.get("GOOGLE_CHROME_BIN")
-    
-    chrome_driver_path = os.environ.get("CHROMEDRIVER_PATH", "chromedriver")
-    service = ChromeService(executable_path=chrome_driver_path)
-    driver = webdriver.Chrome(service=service, options=chrome_options)
+    driver = get_webdriver(headless=True)
     
     try:
         driver.get(target)
@@ -83,16 +97,7 @@ def manual_login_interaction(target):
     You are expected to log in yourself. Once the post-login element
     (e.g., 'play_button') is detected, press Enter in the console to continue.
     """
-    chrome_options = Options()
-    # Do not add the headless argument so that the browser window is visible.
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--no-sandbox")
-    # Set the Chrome binary location
-    chrome_options.binary_location = os.environ.get("GOOGLE_CHROME_BIN")
-    
-    chrome_driver_path = os.environ.get("CHROMEDRIVER_PATH", "chromedriver")
-    service = ChromeService(executable_path=chrome_driver_path)
-    driver = webdriver.Chrome(service=service, options=chrome_options)
+    driver = get_webdriver(headless=False)
     
     try:
         driver.get(target)
