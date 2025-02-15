@@ -22,7 +22,7 @@
       "value": "changeme"
     },
     "ZAP_ADDRESS": {
-      "description": "The address where OWASP ZAP is running. If using a local instance, use 127.0.0.1.",
+      "description": "The address where OWASP ZAP is running. For local testing, use 127.0.0.1.",
       "value": "127.0.0.1"
     },
     "ZAP_PORT": {
