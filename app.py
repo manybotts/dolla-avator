@@ -20,11 +20,11 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'supersecretkey')
 
 # Read OWASP ZAP configuration from environment variables (or use defaults)
-ZAP_API_KEY = os.environ.get("ZAP_API_KEY", "changeme")  # Set in Heroku config if needed
+ZAP_API_KEY = os.environ.get("ZAP_API_KEY", "changeme")
 ZAP_ADDRESS = os.environ.get("ZAP_ADDRESS", "127.0.0.1")
 ZAP_PORT    = os.environ.get("ZAP_PORT", "8090")
 
-# Initialize ZAP API client (using our own proxies configuration)
+# Initialize ZAP API client
 zap = ZAPv2(
     apikey=ZAP_API_KEY,
     proxies={
@@ -35,54 +35,45 @@ zap = ZAPv2(
 
 def simulate_interaction(target, username, password):
     """
-    Uses Selenium to open the target website, perform a login,
-    and simulate playing the Aviator game.
-    NOTE: Adjust element IDs and wait times according to your site's UI.
+    Automatically logs in with provided credentials and simulates actions.
+    (This is the simulated login mode.)
     """
-    # Configure headless Chrome
     chrome_options = Options()
+    # Run headless since the automation is entirely internal
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--no-sandbox")
     
-    # Use the CHROMEDRIVER_PATH provided by the "Chrome for Testing" buildpack.
     chrome_driver_path = os.environ.get("CHROMEDRIVER_PATH", "chromedriver")
     service = ChromeService(executable_path=chrome_driver_path)
-    
-    # Create the webdriver instance
     driver = webdriver.Chrome(service=service, options=chrome_options)
     
     try:
-        # Open the target website
         driver.get(target)
-        
-        # Wait for login elements to appear (up to 10 seconds)
         wait = WebDriverWait(driver, 10)
+        # Wait for the login fields and login button
         username_field = wait.until(EC.presence_of_element_located((By.ID, "username")))
         password_field = wait.until(EC.presence_of_element_located((By.ID, "password")))
-        login_button = wait.until(EC.element_to_be_clickable((By.ID, "login_button")))
+        login_button   = wait.until(EC.element_to_be_clickable((By.ID, "login_button")))
         
-        # Enter credentials and log in
+        # Fill in credentials and log in
         username_field.clear()
         username_field.send_keys(username)
         password_field.clear()
         password_field.send_keys(password)
         login_button.click()
         
-        # Wait for an element that appears only after login – e.g., the "play_button"
+        # Wait for an element that indicates login succeeded (e.g. "play_button")
         wait.until(EC.presence_of_element_located((By.ID, "play_button")))
         
-        # Simulate playing the Aviator game
+        # Simulate playing the game
         play_button = driver.find_element(By.ID, "play_button")
         play_button.click()
-        time.sleep(1)  # Let the game start
-        
-        # Wait until the cashout button is clickable and then click it
+        time.sleep(1)
         cashout_button = wait.until(EC.element_to_be_clickable((By.ID, "cashout_button")))
         cashout_button.click()
-        time.sleep(1)  # Simulate cashing out
-        
-        print("Simulation completed successfully.")
+        time.sleep(1)
+        print("Simulated login and actions completed successfully.")
         
     except Exception as e:
         print(f"Simulation encountered an error: {e}")
@@ -90,42 +81,79 @@ def simulate_interaction(target, username, password):
     finally:
         driver.quit()
 
+def manual_login_interaction(target):
+    """
+    Launches a visible browser window (non-headless) for manual login.
+    You are expected to log in on the opened browser.
+    Once a post-login element (e.g. with ID 'play_button') appears,
+    you will be prompted in the console to press Enter to continue.
+    """
+    chrome_options = Options()
+    # Do not add the headless argument so that the window is visible.
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--no-sandbox")
+    
+    chrome_driver_path = os.environ.get("CHROMEDRIVER_PATH", "chromedriver")
+    service = ChromeService(executable_path=chrome_driver_path)
+    driver = webdriver.Chrome(service=service, options=chrome_options)
+    
+    try:
+        driver.get(target)
+        wait = WebDriverWait(driver, 300)  # wait up to 5 minutes for manual login
+        print("A browser window has been opened. Please log in manually at the target site.")
+        # Wait for an element that indicates login succeeded (adjust the selector as needed)
+        wait.until(EC.presence_of_element_located((By.ID, "play_button")))
+        input("Login detected. Press Enter in this console to continue with vulnerability scanning...")
+        print("Manual login completed.")
+    except Exception as e:
+        print(f"Manual login interaction error: {e}")
+        flash(f"Manual login interaction error: {e}", "danger")
+    finally:
+        driver.quit()
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
         target_url = request.form.get('target_url')
-        username   = request.form.get('username')
-        password   = request.form.get('password')
-
-        if not target_url or not username or not password:
-            flash("Please provide all required information.", "warning")
+        manual_mode = request.form.get('manual_mode')  # Checkbox value "on" if manual login is desired
+        
+        if not target_url:
+            flash("Please provide a target URL.", "warning")
             return redirect(url_for('index'))
-
-        flash("Starting simulation of user interactions...", "info")
-        simulate_interaction(target_url, username, password)
+        
+        if manual_mode == "on":
+            flash("Launching browser for manual login. Please log in using your browser window.", "info")
+            manual_login_interaction(target_url)
+        else:
+            # For simulated login mode, require username and password
+            username = request.form.get('username')
+            password = request.form.get('password')
+            if not username or not password:
+                flash("Please provide username and password for simulated login.", "warning")
+                return redirect(url_for('index'))
+            flash("Starting simulated login...", "info")
+            simulate_interaction(target_url, username, password)
         
         flash("Starting vulnerability scan via OWASP ZAP. Please wait...", "info")
-        # Ensure ZAP has loaded the target site by opening it via the API.
+        # Load the target site via ZAP to ensure it has captured the session
         zap.urlopen(target_url)
         time.sleep(2)
-
-        # Start the Spider (crawling) scan.
+        
+        # Start Spider scan
         spider_id = zap.spider.scan(target_url)
-        time.sleep(2)  # Let the spider start
-
+        time.sleep(2)
         while int(zap.spider.status(spider_id)) < 100:
             print(f"Spider progress: {zap.spider.status(spider_id)}%")
             time.sleep(1)
         print("Spider scan completed.")
-
-        # Start the Active scan.
+        
+        # Start Active scan
         scan_id = zap.ascan.scan(target_url)
         while int(zap.ascan.status(scan_id)) < 100:
             print(f"Active scan progress: {zap.ascan.status(scan_id)}%")
             time.sleep(5)
         print("Active scan completed.")
-
-        # Retrieve alerts (vulnerabilities) found by ZAP.
+        
         alerts = zap.core.alerts(baseurl=target_url)
         flash("Scan completed.", "success")
         return render_template('results.html', target=target_url, alerts=alerts)
