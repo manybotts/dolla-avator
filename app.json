@@ -1,6 +1,6 @@
 {
   "name": "Dolla Avator Audit Tool",
-  "description": "A user-friendly web app that simulates user interactions (login and gameplay) and performs vulnerability scanning using OWASP ZAP and Selenium.",
+  "description": "A user-friendly web app that logs your login actions on a target site (either automatically or manually) and performs vulnerability scanning using OWASP ZAP and Selenium.",
   "repository": "https://github.com/manybotts/dolla-avator",
   "logo": "https://via.placeholder.com/150",
   "keywords": ["python", "flask", "owasp", "selenium", "heroku", "audit", "security"],
@@ -14,7 +14,7 @@
   ],
   "env": {
     "ZAP_API_KEY": {
-      "description": "API Key for OWASP ZAP (if required). You can find or set this in ZAP under Tools > Options > API.",
+      "description": "API Key for OWASP ZAP (if required). You can set this in ZAP under Tools > Options > API.",
       "required": false,
       "value": "changeme"
     },
