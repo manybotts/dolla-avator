@@ -12,7 +12,7 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'supersecretkey')
 
 # Read OWASP ZAP configuration from environment variables (or use defaults)
-ZAP_API_KEY = os.environ.get("ZAP_API_KEY", "changeme")  # If you use an API key, set it in Heroku config.
+ZAP_API_KEY = os.environ.get("ZAP_API_KEY", "changeme")  # If using an API key, set it in Heroku config.
 ZAP_ADDRESS = os.environ.get("ZAP_ADDRESS", "127.0.0.1")
 ZAP_PORT    = os.environ.get("ZAP_PORT", "8090")
 
