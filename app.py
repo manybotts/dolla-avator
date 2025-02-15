@@ -6,6 +6,7 @@ from zapv2 import ZAPv2
 # For Selenium automation
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.common.by import By
 
 # Disable proxy usage for all outgoing requests.
@@ -40,8 +41,12 @@ def simulate_interaction(target, username, password):
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--no-sandbox")
     
-    # Create the webdriver (ensure chromedriver is in PATH or specify its location)
-    driver = webdriver.Chrome(options=chrome_options)
+    # Use the CHROMEDRIVER_PATH provided by the "Chrome for Testing" buildpack.
+    chrome_driver_path = os.environ.get("CHROMEDRIVER_PATH", "chromedriver")
+    service = ChromeService(executable_path=chrome_driver_path)
+    
+    # Create the webdriver instance
+    driver = webdriver.Chrome(service=service, options=chrome_options)
     
     try:
         # Open the target site
