@@ -11,18 +11,20 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-# Disable proxy usage for all outgoing requests.
+# Ensure no proxy settings are used
 os.environ["NO_PROXY"] = "*"
+os.environ["HTTP_PROXY"] = ""
+os.environ["HTTPS_PROXY"] = ""
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'supersecretkey')
 
 # Read OWASP ZAP configuration from environment variables (or use defaults)
-ZAP_API_KEY = os.environ.get("ZAP_API_KEY", "changeme")  # If using an API key, set it in Heroku config.
+ZAP_API_KEY = os.environ.get("ZAP_API_KEY", "changeme")  # Set in Heroku config if needed
 ZAP_ADDRESS = os.environ.get("ZAP_ADDRESS", "127.0.0.1")
 ZAP_PORT    = os.environ.get("ZAP_PORT", "8090")
 
-# Initialize ZAP API client
+# Initialize ZAP API client (using our own proxies configuration)
 zap = ZAPv2(
     apikey=ZAP_API_KEY,
     proxies={
@@ -35,7 +37,7 @@ def simulate_interaction(target, username, password):
     """
     Uses Selenium to open the target website, perform a login,
     and simulate playing the Aviator game.
-    NOTE: Adjust element IDs and waits according to your site's actual UI.
+    NOTE: Adjust element IDs and wait times according to your site's UI.
     """
     # Configure headless Chrome
     chrome_options = Options()
@@ -54,14 +56,10 @@ def simulate_interaction(target, username, password):
         # Open the target website
         driver.get(target)
         
-        # Use WebDriverWait to wait for the login elements to appear
-        wait = WebDriverWait(driver, 10)  # wait up to 10 seconds
-        
-        # Wait for the username field
+        # Wait for login elements to appear (up to 10 seconds)
+        wait = WebDriverWait(driver, 10)
         username_field = wait.until(EC.presence_of_element_located((By.ID, "username")))
-        # Wait for the password field
         password_field = wait.until(EC.presence_of_element_located((By.ID, "password")))
-        # Wait for the login button to be clickable
         login_button = wait.until(EC.element_to_be_clickable((By.ID, "login_button")))
         
         # Enter credentials and log in
@@ -71,7 +69,7 @@ def simulate_interaction(target, username, password):
         password_field.send_keys(password)
         login_button.click()
         
-        # Wait for an element that appears only after login – for example, the "play_button"
+        # Wait for an element that appears only after login – e.g., the "play_button"
         wait.until(EC.presence_of_element_located((By.ID, "play_button")))
         
         # Simulate playing the Aviator game
@@ -79,7 +77,7 @@ def simulate_interaction(target, username, password):
         play_button.click()
         time.sleep(1)  # Let the game start
         
-        # Wait until the cashout button is clickable and click it
+        # Wait until the cashout button is clickable and then click it
         cashout_button = wait.until(EC.element_to_be_clickable((By.ID, "cashout_button")))
         cashout_button.click()
         time.sleep(1)  # Simulate cashing out
