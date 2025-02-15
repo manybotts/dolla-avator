@@ -36,13 +36,14 @@ zap = ZAPv2(
 def simulate_interaction(target, username, password):
     """
     Automatically logs in with provided credentials and simulates actions.
-    (This is the simulated login mode.)
+    (Simulated login mode)
     """
     chrome_options = Options()
-    # Run headless since the automation is entirely internal
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--no-sandbox")
+    # Set the Chrome binary location from the buildpack
+    chrome_options.binary_location = os.environ.get("GOOGLE_CHROME_BIN")
     
     chrome_driver_path = os.environ.get("CHROMEDRIVER_PATH", "chromedriver")
     service = ChromeService(executable_path=chrome_driver_path)
@@ -51,22 +52,17 @@ def simulate_interaction(target, username, password):
     try:
         driver.get(target)
         wait = WebDriverWait(driver, 10)
-        # Wait for the login fields and login button
         username_field = wait.until(EC.presence_of_element_located((By.ID, "username")))
         password_field = wait.until(EC.presence_of_element_located((By.ID, "password")))
         login_button   = wait.until(EC.element_to_be_clickable((By.ID, "login_button")))
         
-        # Fill in credentials and log in
         username_field.clear()
         username_field.send_keys(username)
         password_field.clear()
         password_field.send_keys(password)
         login_button.click()
         
-        # Wait for an element that indicates login succeeded (e.g. "play_button")
         wait.until(EC.presence_of_element_located((By.ID, "play_button")))
-        
-        # Simulate playing the game
         play_button = driver.find_element(By.ID, "play_button")
         play_button.click()
         time.sleep(1)
@@ -84,14 +80,15 @@ def simulate_interaction(target, username, password):
 def manual_login_interaction(target):
     """
     Launches a visible browser window (non-headless) for manual login.
-    You are expected to log in on the opened browser.
-    Once a post-login element (e.g. with ID 'play_button') appears,
-    you will be prompted in the console to press Enter to continue.
+    You are expected to log in yourself. Once the post-login element
+    (e.g., 'play_button') is detected, press Enter in the console to continue.
     """
     chrome_options = Options()
-    # Do not add the headless argument so that the window is visible.
+    # Do not add the headless argument so that the browser window is visible.
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--no-sandbox")
+    # Set the Chrome binary location
+    chrome_options.binary_location = os.environ.get("GOOGLE_CHROME_BIN")
     
     chrome_driver_path = os.environ.get("CHROMEDRIVER_PATH", "chromedriver")
     service = ChromeService(executable_path=chrome_driver_path)
@@ -101,7 +98,6 @@ def manual_login_interaction(target):
         driver.get(target)
         wait = WebDriverWait(driver, 300)  # wait up to 5 minutes for manual login
         print("A browser window has been opened. Please log in manually at the target site.")
-        # Wait for an element that indicates login succeeded (adjust the selector as needed)
         wait.until(EC.presence_of_element_located((By.ID, "play_button")))
         input("Login detected. Press Enter in this console to continue with vulnerability scanning...")
         print("Manual login completed.")
@@ -115,7 +111,7 @@ def manual_login_interaction(target):
 def index():
     if request.method == 'POST':
         target_url = request.form.get('target_url')
-        manual_mode = request.form.get('manual_mode')  # Checkbox value "on" if manual login is desired
+        manual_mode = request.form.get('manual_mode')  # "on" if manual login mode is selected
         
         if not target_url:
             flash("Please provide a target URL.", "warning")
@@ -125,7 +121,6 @@ def index():
             flash("Launching browser for manual login. Please log in using your browser window.", "info")
             manual_login_interaction(target_url)
         else:
-            # For simulated login mode, require username and password
             username = request.form.get('username')
             password = request.form.get('password')
             if not username or not password:
@@ -135,11 +130,9 @@ def index():
             simulate_interaction(target_url, username, password)
         
         flash("Starting vulnerability scan via OWASP ZAP. Please wait...", "info")
-        # Load the target site via ZAP to ensure it has captured the session
         zap.urlopen(target_url)
         time.sleep(2)
         
-        # Start Spider scan
         spider_id = zap.spider.scan(target_url)
         time.sleep(2)
         while int(zap.spider.status(spider_id)) < 100:
@@ -147,7 +140,6 @@ def index():
             time.sleep(1)
         print("Spider scan completed.")
         
-        # Start Active scan
         scan_id = zap.ascan.scan(target_url)
         while int(zap.ascan.status(scan_id)) < 100:
             print(f"Active scan progress: {zap.ascan.status(scan_id)}%")
