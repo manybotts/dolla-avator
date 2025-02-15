@@ -8,6 +8,8 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
 # Disable proxy usage for all outgoing requests.
 os.environ["NO_PROXY"] = "*"
@@ -49,30 +51,36 @@ def simulate_interaction(target, username, password):
     driver = webdriver.Chrome(service=service, options=chrome_options)
     
     try:
-        # Open the target site
+        # Open the target website
         driver.get(target)
-        time.sleep(2)  # Wait for the page to load
         
-        # --- Simulate Login ---
-        # Replace these element IDs with your site's actual login form identifiers.
-        username_field = driver.find_element(By.ID, "username")
-        password_field = driver.find_element(By.ID, "password")
-        login_button   = driver.find_element(By.ID, "login_button")
+        # Use WebDriverWait to wait for the login elements to appear
+        wait = WebDriverWait(driver, 10)  # wait up to 10 seconds
         
+        # Wait for the username field
+        username_field = wait.until(EC.presence_of_element_located((By.ID, "username")))
+        # Wait for the password field
+        password_field = wait.until(EC.presence_of_element_located((By.ID, "password")))
+        # Wait for the login button to be clickable
+        login_button = wait.until(EC.element_to_be_clickable((By.ID, "login_button")))
+        
+        # Enter credentials and log in
         username_field.clear()
         username_field.send_keys(username)
         password_field.clear()
         password_field.send_keys(password)
         login_button.click()
-        time.sleep(3)  # Wait for login to complete
         
-        # --- Simulate Playing the Aviator Game ---
-        # Adjust these selectors to match your site's elements.
+        # Wait for an element that appears only after login – for example, the "play_button"
+        wait.until(EC.presence_of_element_located((By.ID, "play_button")))
+        
+        # Simulate playing the Aviator game
         play_button = driver.find_element(By.ID, "play_button")
         play_button.click()
         time.sleep(1)  # Let the game start
         
-        cashout_button = driver.find_element(By.ID, "cashout_button")
+        # Wait until the cashout button is clickable and click it
+        cashout_button = wait.until(EC.element_to_be_clickable((By.ID, "cashout_button")))
         cashout_button.click()
         time.sleep(1)  # Simulate cashing out
         
