@@ -39,13 +39,17 @@ def get_chrome_options(headless=True):
         chrome_options.add_argument("--headless")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--no-sandbox")
-    # Attempt to get the Chrome binary from the environment variable.
-    # If not set (e.g. during local testing), fallback to a common default.
+    
+    # Attempt to get the Chrome binary from the environment variable
     chrome_bin = os.environ.get("GOOGLE_CHROME_BIN")
     if not chrome_bin:
-        # Fallback: update this path if your local Chrome binary is located elsewhere.
-        chrome_bin = "/usr/bin/google-chrome"
-        print("GOOGLE_CHROME_BIN not set; falling back to:", chrome_bin)
+        # If running on Heroku, the buildpack should set this!
+        if os.environ.get("DYNO"):
+            raise Exception("GOOGLE_CHROME_BIN is not set. Ensure that the Chrome for Testing buildpack is installed and configured correctly.")
+        else:
+            # For local testing, you can set a fallback (adjust this as needed)
+            chrome_bin = "/usr/bin/google-chrome"
+            print("GOOGLE_CHROME_BIN not set; falling back to:", chrome_bin)
     chrome_options.binary_location = chrome_bin
     return chrome_options
 
