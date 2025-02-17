@@ -39,12 +39,12 @@ def get_chrome_options(headless=True):
         chrome_options.add_argument("--headless")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--no-sandbox")
-    # Removed the --user-data-dir argument to avoid conflicts.
+    # Do not set a --user-data-dir argument; allow Chrome to create a temporary profile.
     return chrome_options
 
 def get_webdriver(headless=True):
     chrome_options = get_chrome_options(headless)
-    # Chrome and Chromedriver are on PATH via the Chrome for Testing buildpack.
+    # Chrome and Chromedriver are assumed to be on PATH (e.g. provided by the Chrome for Testing buildpack)
     driver = webdriver.Chrome(options=chrome_options)
     return driver
 
