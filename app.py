@@ -1,17 +1,8 @@
 import os
 import time
-import tempfile
-import shutil
 from flask import Flask, render_template, request, redirect, url_for, flash
 from zapv2 import ZAPv2
-
-# For Selenium automation
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service as ChromeService
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
+from playwright.sync_api import sync_playwright
 
 # Ensure no proxy settings are used
 os.environ["NO_PROXY"] = "*"
@@ -21,7 +12,7 @@ os.environ["HTTPS_PROXY"] = ""
 app = Flask(__name__)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'supersecretkey')
 
-# Read OWASP ZAP configuration from environment variables (or use defaults)
+# OWASP ZAP configuration from environment variables (or use defaults)
 ZAP_API_KEY = os.environ.get("ZAP_API_KEY", "changeme")
 ZAP_ADDRESS = os.environ.get("ZAP_ADDRESS", "127.0.0.1")
 ZAP_PORT    = os.environ.get("ZAP_PORT", "8090")
@@ -35,82 +26,60 @@ zap = ZAPv2(
     }
 )
 
-def get_chrome_options(headless=True):
-    chrome_options = Options()
-    if headless:
-        chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--no-sandbox")
-    # Create a unique temporary directory for Chrome's user data.
-    user_data_dir = tempfile.mkdtemp(prefix="chrome_user_data_")
-    chrome_options.add_argument(f"--user-data-dir={user_data_dir}")
-    return chrome_options, user_data_dir
-
-def get_webdriver(headless=True):
-    chrome_options, user_data_dir = get_chrome_options(headless)
-    # Chrome and Chromedriver are assumed to be on PATH (provided by the Chrome for Testing buildpack)
-    driver = webdriver.Chrome(options=chrome_options)
-    return driver, user_data_dir
-
 def simulate_interaction(target, username, password):
     """
-    Automatically logs in with provided credentials and simulates actions.
-    (Simulated login mode)
+    Uses Playwright to automatically log in with provided credentials
+    and simulate user actions (simulated login mode).
     """
-    driver, user_data_dir = get_webdriver(headless=True)
-    
     try:
-        driver.get(target)
-        wait = WebDriverWait(driver, 10)
-        username_field = wait.until(EC.presence_of_element_located((By.ID, "username")))
-        password_field = wait.until(EC.presence_of_element_located((By.ID, "password")))
-        login_button   = wait.until(EC.element_to_be_clickable((By.ID, "login_button")))
-        
-        username_field.clear()
-        username_field.send_keys(username)
-        password_field.clear()
-        password_field.send_keys(password)
-        login_button.click()
-        
-        # Wait until an element that indicates a successful login appears (e.g., "play_button")
-        wait.until(EC.presence_of_element_located((By.ID, "play_button")))
-        play_button = driver.find_element(By.ID, "play_button")
-        play_button.click()
-        time.sleep(1)
-        cashout_button = wait.until(EC.element_to_be_clickable((By.ID, "cashout_button")))
-        cashout_button.click()
-        time.sleep(1)
-        print("Simulated login and actions completed successfully.")
-        
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            context = browser.new_context()
+            page = context.new_page()
+            page.goto(target)
+            
+            # Fill in the login fields and click the login button.
+            page.fill("#username", username)
+            page.fill("#password", password)
+            page.click("#login_button")
+            
+            # Wait for an element that indicates a successful login (e.g., "play_button").
+            page.wait_for_selector("#play_button", timeout=10000)
+            page.click("#play_button")
+            time.sleep(1)  # Wait briefly for the game to start.
+            page.click("#cashout_button")
+            time.sleep(1)
+            
+            print("Simulated login and actions completed successfully.")
+            browser.close()
     except Exception as e:
         print(f"Simulation encountered an error: {e}")
         flash(f"Simulation error: {e}", "danger")
-    finally:
-        driver.quit()
-        # Remove the temporary user data directory
-        shutil.rmtree(user_data_dir, ignore_errors=True)
 
 def manual_login_interaction(target):
     """
-    Launches a visible browser window (non-headless) for manual login.
-    You are expected to log in yourself. Once the post-login element
-    (e.g., 'play_button') is detected, press Enter in the console to continue.
+    Uses Playwright to launch a visible (non-headless) browser window so that
+    you can manually log in. Once an element that indicates successful login
+    (e.g., "play_button") appears, you can press Enter in the console to continue.
+    (This mode is best for local testing.)
     """
-    driver, user_data_dir = get_webdriver(headless=False)
-    
     try:
-        driver.get(target)
-        wait = WebDriverWait(driver, 300)  # wait up to 5 minutes for manual login
-        print("A browser window has been opened. Please log in manually at the target site.")
-        wait.until(EC.presence_of_element_located((By.ID, "play_button")))
-        input("Login detected. Press Enter in this console to continue with vulnerability scanning...")
-        print("Manual login completed.")
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=False)
+            context = browser.new_context()
+            page = context.new_page()
+            page.goto(target)
+            
+            print("A browser window has been opened. Please log in manually at the target site.")
+            # Wait up to 5 minutes for the login to complete.
+            page.wait_for_selector("#play_button", timeout=300000)
+            input("Login detected. Press Enter in this console to continue with vulnerability scanning...")
+            
+            print("Manual login completed.")
+            browser.close()
     except Exception as e:
         print(f"Manual login interaction error: {e}")
         flash(f"Manual login interaction error: {e}", "danger")
-    finally:
-        driver.quit()
-        shutil.rmtree(user_data_dir, ignore_errors=True)
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -135,9 +104,11 @@ def index():
             simulate_interaction(target_url, username, password)
         
         flash("Starting vulnerability scan via OWASP ZAP. Please wait...", "info")
+        # Ensure ZAP captures the target site's content
         zap.urlopen(target_url)
         time.sleep(2)
         
+        # Spider scan
         spider_id = zap.spider.scan(target_url)
         time.sleep(2)
         while int(zap.spider.status(spider_id)) < 100:
@@ -145,6 +116,7 @@ def index():
             time.sleep(1)
         print("Spider scan completed.")
         
+        # Active scan
         scan_id = zap.ascan.scan(target_url)
         while int(zap.ascan.status(scan_id)) < 100:
             print(f"Active scan progress: {zap.ascan.status(scan_id)}%")
