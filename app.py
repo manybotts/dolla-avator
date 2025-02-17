@@ -1,5 +1,6 @@
 import os
 import time
+import tempfile
 from flask import Flask, render_template, request, redirect, url_for, flash
 from zapv2 import ZAPv2
 
@@ -39,12 +40,14 @@ def get_chrome_options(headless=True):
         chrome_options.add_argument("--headless")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--no-sandbox")
+    # Specify a unique user data directory to avoid conflicts
+    user_data_dir = tempfile.mkdtemp()
+    chrome_options.add_argument(f"--user-data-dir={user_data_dir}")
     # No need to set binary_location; Chrome and Chromedriver are on PATH via the buildpack.
     return chrome_options
 
 def get_webdriver(headless=True):
     chrome_options = get_chrome_options(headless)
-    # Since both Chrome and Chromedriver are on PATH, we can simply call:
     driver = webdriver.Chrome(options=chrome_options)
     return driver
 
@@ -128,7 +131,6 @@ def index():
             simulate_interaction(target_url, username, password)
         
         flash("Starting vulnerability scan via OWASP ZAP. Please wait...", "info")
-        # Ensure ZAP has loaded the target site
         zap.urlopen(target_url)
         time.sleep(2)
         
