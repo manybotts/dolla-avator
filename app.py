@@ -1,5 +1,7 @@
 import os
 import time
+import tempfile
+import shutil
 from flask import Flask, render_template, request, redirect, url_for, flash
 from zapv2 import ZAPv2
 
@@ -39,21 +41,23 @@ def get_chrome_options(headless=True):
         chrome_options.add_argument("--headless")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--no-sandbox")
-    # Do not set a --user-data-dir argument; allow Chrome to create a temporary profile.
-    return chrome_options
+    # Create a unique temporary directory for Chrome's user data.
+    user_data_dir = tempfile.mkdtemp(prefix="chrome_user_data_")
+    chrome_options.add_argument(f"--user-data-dir={user_data_dir}")
+    return chrome_options, user_data_dir
 
 def get_webdriver(headless=True):
-    chrome_options = get_chrome_options(headless)
-    # Chrome and Chromedriver are assumed to be on PATH (e.g. provided by the Chrome for Testing buildpack)
+    chrome_options, user_data_dir = get_chrome_options(headless)
+    # Chrome and Chromedriver are assumed to be on PATH (provided by the Chrome for Testing buildpack)
     driver = webdriver.Chrome(options=chrome_options)
-    return driver
+    return driver, user_data_dir
 
 def simulate_interaction(target, username, password):
     """
     Automatically logs in with provided credentials and simulates actions.
     (Simulated login mode)
     """
-    driver = get_webdriver(headless=True)
+    driver, user_data_dir = get_webdriver(headless=True)
     
     try:
         driver.get(target)
@@ -83,6 +87,8 @@ def simulate_interaction(target, username, password):
         flash(f"Simulation error: {e}", "danger")
     finally:
         driver.quit()
+        # Remove the temporary user data directory
+        shutil.rmtree(user_data_dir, ignore_errors=True)
 
 def manual_login_interaction(target):
     """
@@ -90,7 +96,7 @@ def manual_login_interaction(target):
     You are expected to log in yourself. Once the post-login element
     (e.g., 'play_button') is detected, press Enter in the console to continue.
     """
-    driver = get_webdriver(headless=False)
+    driver, user_data_dir = get_webdriver(headless=False)
     
     try:
         driver.get(target)
@@ -104,6 +110,7 @@ def manual_login_interaction(target):
         flash(f"Manual login interaction error: {e}", "danger")
     finally:
         driver.quit()
+        shutil.rmtree(user_data_dir, ignore_errors=True)
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
