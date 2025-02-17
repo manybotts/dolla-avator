@@ -39,25 +39,13 @@ def get_chrome_options(headless=True):
         chrome_options.add_argument("--headless")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--no-sandbox")
-    
-    # Attempt to get the Chrome binary from the environment variable
-    chrome_bin = os.environ.get("GOOGLE_CHROME_BIN")
-    if not chrome_bin:
-        # If running on Heroku, the buildpack should set this!
-        if os.environ.get("DYNO"):
-            raise Exception("GOOGLE_CHROME_BIN is not set. Ensure that the Chrome for Testing buildpack is installed and configured correctly.")
-        else:
-            # For local testing, you can set a fallback (adjust this as needed)
-            chrome_bin = "/usr/bin/google-chrome"
-            print("GOOGLE_CHROME_BIN not set; falling back to:", chrome_bin)
-    chrome_options.binary_location = chrome_bin
+    # No need to set binary_location; Chrome and Chromedriver are on PATH via the buildpack.
     return chrome_options
 
 def get_webdriver(headless=True):
     chrome_options = get_chrome_options(headless)
-    chrome_driver_path = os.environ.get("CHROMEDRIVER_PATH", "chromedriver")
-    service = ChromeService(executable_path=chrome_driver_path)
-    driver = webdriver.Chrome(service=service, options=chrome_options)
+    # Since both Chrome and Chromedriver are on PATH, we can simply call:
+    driver = webdriver.Chrome(options=chrome_options)
     return driver
 
 def simulate_interaction(target, username, password):
@@ -80,6 +68,7 @@ def simulate_interaction(target, username, password):
         password_field.send_keys(password)
         login_button.click()
         
+        # Wait until an element that indicates a successful login appears (e.g., "play_button")
         wait.until(EC.presence_of_element_located((By.ID, "play_button")))
         play_button = driver.find_element(By.ID, "play_button")
         play_button.click()
@@ -139,6 +128,7 @@ def index():
             simulate_interaction(target_url, username, password)
         
         flash("Starting vulnerability scan via OWASP ZAP. Please wait...", "info")
+        # Ensure ZAP has loaded the target site
         zap.urlopen(target_url)
         time.sleep(2)
         
